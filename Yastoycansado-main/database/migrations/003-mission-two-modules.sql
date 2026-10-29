@@ -1,0 +1,142 @@
+USE prossor_colegio;
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ user_id BIGINT UNSIGNED NOT NULL,
+ token_hash CHAR(64) NOT NULL UNIQUE,
+ expires_at DATETIME NOT NULL,
+ used_at DATETIME NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+ INDEX (user_id, expires_at)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS password_reset_limits (
+ email_hash CHAR(64) NOT NULL,
+ ip_hash CHAR(64) NOT NULL,
+ request_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+ window_started_at DATETIME NOT NULL,
+ PRIMARY KEY (email_hash, ip_hash),
+ INDEX (window_started_at)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS tutor_usage_limits (
+ user_id BIGINT UNSIGNED PRIMARY KEY,
+ request_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+ window_started_at DATETIME NOT NULL,
+ FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS assignments (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ teacher_id BIGINT UNSIGNED NOT NULL,
+ title VARCHAR(180) NOT NULL,
+ instructions TEXT NOT NULL,
+ subject_id INT UNSIGNED NULL,
+ competency_id BIGINT UNSIGNED NULL,
+ grade_level TINYINT UNSIGNED NULL,
+ due_at DATETIME NULL,
+ max_score DECIMAL(7,2) NOT NULL DEFAULT 100,
+ status ENUM('draft','published','closed') NOT NULL DEFAULT 'draft',
+ allow_resubmission BOOLEAN NOT NULL DEFAULT FALSE,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE SET NULL,
+ FOREIGN KEY (competency_id) REFERENCES academic_competencies(id) ON DELETE SET NULL,
+ INDEX (teacher_id,status), INDEX (grade_level,due_at)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS assignment_targets (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ assignment_id BIGINT UNSIGNED NOT NULL,
+ group_id BIGINT UNSIGNED NULL,
+ student_id BIGINT UNSIGNED NULL,
+ grade_level TINYINT UNSIGNED NULL,
+ FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+ FOREIGN KEY (group_id) REFERENCES teacher_groups(id) ON DELETE CASCADE,
+ FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+ INDEX (group_id), INDEX (student_id), INDEX (grade_level)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS assignment_submissions (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ assignment_id BIGINT UNSIGNED NOT NULL,
+ student_id BIGINT UNSIGNED NOT NULL,
+ response_text MEDIUMTEXT NULL,
+ status ENUM('draft','submitted','late','in_review','graded','returned') NOT NULL DEFAULT 'draft',
+ score DECIMAL(7,2) NULL,
+ feedback TEXT NULL,
+ submitted_at DATETIME NULL,
+ graded_by BIGINT UNSIGNED NULL,
+ graded_at DATETIME NULL,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE (assignment_id,student_id),
+ FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+ FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY (graded_by) REFERENCES users(id) ON DELETE SET NULL,
+ INDEX (student_id,status), INDEX (assignment_id,status)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS assignment_files (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ assignment_id BIGINT UNSIGNED NOT NULL,
+ submission_id BIGINT UNSIGNED NULL,
+ uploaded_by BIGINT UNSIGNED NOT NULL,
+ storage_name CHAR(64) NOT NULL UNIQUE,
+ original_name VARCHAR(255) NOT NULL,
+ mime_type VARCHAR(100) NOT NULL,
+ size_bytes INT UNSIGNED NOT NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+ FOREIGN KEY (submission_id) REFERENCES assignment_submissions(id) ON DELETE CASCADE,
+ FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE,
+ INDEX (assignment_id,submission_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS question_authors (
+ question_id BIGINT UNSIGNED PRIMARY KEY,
+ author_id BIGINT UNSIGNED NOT NULL,
+ archived_at DATETIME NULL,
+ FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+ FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
+ INDEX (author_id,archived_at)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS question_tags (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ question_id BIGINT UNSIGNED NOT NULL,
+ tag VARCHAR(60) NOT NULL,
+ UNIQUE (question_id,tag),
+ FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+ INDEX (tag)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS question_imports (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ user_id BIGINT UNSIGNED NOT NULL,
+ created_count INT UNSIGNED NOT NULL DEFAULT 0,
+ skipped_count INT UNSIGNED NOT NULL DEFAULT 0,
+ errors JSON NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS exam_configs (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ exam_id BIGINT UNSIGNED NOT NULL UNIQUE,
+ grade_level TINYINT UNSIGNED NOT NULL,
+ duration_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 30,
+ attempt_limit TINYINT UNSIGNED NOT NULL DEFAULT 1,
+ random_order BOOLEAN NOT NULL DEFAULT TRUE,
+ published BOOLEAN NOT NULL DEFAULT FALSE,
+ opens_at DATETIME NULL,
+ closes_at DATETIME NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+ INDEX (published,grade_level,opens_at,closes_at)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS payment_webhook_events (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ provider VARCHAR(60) NOT NULL,
+ event_id VARCHAR(190) NOT NULL,
+ payload_hash CHAR(64) NOT NULL,
+ status ENUM('received','verified','rejected','processed') NOT NULL DEFAULT 'received',
+ received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ processed_at DATETIME NULL,
+ UNIQUE (provider,event_id)
+) ENGINE=InnoDB;
